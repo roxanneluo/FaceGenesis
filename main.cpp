@@ -22,7 +22,6 @@ const char *error_msgs[] =
 };
 
 String face_cascade_name = "haarcascade_frontalface_alt.xml";
-CascadeClassifier face_cascade;
 string window_name = "faceOff";
 RNG rng(2046);
 
@@ -44,17 +43,19 @@ void draw_faces(const Mat &image, vector<Rect> &faces)
     }
 }
 
-void detect_face(const Mat &gray_image, vector<Rect> &faces)
+void detect_face(CascadeClassifier *p_face_cascade, const Mat &gray_image, vector<Rect> &faces)
 {
     faces.clear();
 
     equalizeHist(gray_image, gray_image);
-    face_cascade.detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
+    p_face_cascade->detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
 }
 
 int main(int, char**)
 {
-    if (!face_cascade.load(face_cascade_name))
+    CascadeClassifier *p_face_cascade = new CascadeClassifier();
+
+    if (!p_face_cascade->load(face_cascade_name))
         return error_happened(ER_LOAD_FACE_MODULE);
 
     VideoCapture cap(0); 
@@ -64,22 +65,29 @@ int main(int, char**)
     namedWindow(window_name, 1);
     for (;;)
     {
+        Mat frame;
+        cap >> frame;
+
         Mat image;
-        cap >> image;
-        flip(image, image, 1);
+        flip(frame, image, 1);
 
         Mat gray_image;
         cvtColor(image, gray_image, COLOR_BGR2GRAY);
 
         vector<Rect> faces;
-        detect_face(gray_image, faces);
+        detect_face(p_face_cascade, gray_image, faces);
         draw_faces(image, faces);
 
         imshow(window_name, image);
         
-        if (waitKey(30) >= 0) 
+        if (waitKey(10) >= 0)
+        {
+            cout << "break" << endl;
             break;
+        }
     }
+
+    delete p_face_cascade;
 
     return 0;
 }
