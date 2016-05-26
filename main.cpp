@@ -43,12 +43,24 @@ void draw_faces(const Mat &image, vector<Rect> &faces)
     }
 }
 
-void detect_face(CascadeClassifier *p_face_cascade, const Mat &gray_image, vector<Rect> &faces)
+void detect_faces(CascadeClassifier *p_face_cascade, const Mat &gray_image, vector<Rect> &faces)
 {
     faces.clear();
 
     equalizeHist(gray_image, gray_image);
     p_face_cascade->detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
+}
+
+int track_faces(vector<Rect> &faces)
+{
+    // do face tracking here
+    // return number of succeeded tracked faces
+    
+    // temporally, we clear all detected faces here
+    // the code should be removed when a face tracking algorithm is implemented.
+    faces.clear();
+
+    return (int)faces.size();
 }
 
 int main(int, char**)
@@ -63,6 +75,7 @@ int main(int, char**)
         return error_happened(ER_OPEN_WEBCAM);
 
     namedWindow(window_name, 1);
+    vector<Rect> faces;
     for (;;)
     {
         Mat frame;
@@ -74,8 +87,19 @@ int main(int, char**)
         Mat gray_image;
         cvtColor(image, gray_image, COLOR_BGR2GRAY);
 
-        vector<Rect> faces;
-        detect_face(p_face_cascade, gray_image, faces);
+        if (faces.empty())
+        {
+            detect_faces(p_face_cascade, gray_image, faces);
+        } 
+        else
+        {
+            if (track_faces(faces) <= 0)
+            {
+                // when tracking failed, re-detect faces
+                detect_faces(p_face_cascade, gray_image, faces);
+            }
+        }
+     
         draw_faces(image, faces);
 
         imshow(window_name, image);
