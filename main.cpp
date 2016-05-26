@@ -9,6 +9,9 @@
 using namespace cv;
 using namespace std;
 
+#define SPACE_KEY_CODE   32
+#define ESCAPE_KEY_CODE  27
+
 enum ErrorType
 {
     ER_LOAD_FACE_MODULE = 0,
@@ -63,6 +66,11 @@ int track_faces(vector<Rect> &faces)
     return (int)faces.size();
 }
 
+void morph_faces(Mat &image, const vector<Rect> &faces)
+{
+    cout << "morph face" << endl;
+}
+
 int main(int, char**)
 {
     CascadeClassifier *p_face_cascade = new CascadeClassifier();
@@ -76,6 +84,7 @@ int main(int, char**)
 
     namedWindow(window_name, 1);
     vector<Rect> faces;
+    bool is_in_morphing_mode = false;
     for (;;)
     {
         Mat frame;
@@ -100,15 +109,21 @@ int main(int, char**)
             }
         }
      
+        if (is_in_morphing_mode)
+            morph_faces(image, faces);
+
         draw_faces(image, faces);
 
         imshow(window_name, image);
         
-        if (waitKey(10) >= 0)
-        {
-            cout << "break" << endl;
+        int key_code = waitKey(10);
+        bool is_leaving = (key_code == ESCAPE_KEY_CODE);
+        if (is_leaving)
             break;
-        }
+
+        // enter / leave morphing mode
+        if (key_code == SPACE_KEY_CODE)
+            is_in_morphing_mode = !is_in_morphing_mode; 
     }
 
     delete p_face_cascade;
