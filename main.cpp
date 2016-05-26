@@ -26,7 +26,6 @@ const char *error_msgs[] =
 
 String face_cascade_name = "haarcascade_frontalface_alt.xml";
 string window_name = "faceOff";
-RNG rng(2046);
 
 int error_happened(const ErrorType error_type)
 {
