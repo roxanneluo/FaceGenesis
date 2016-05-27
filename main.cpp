@@ -150,15 +150,26 @@ void draw_delaunay(cv::Mat& img, cv::Subdiv2D& subdiv, cv::Scalar delaunay_color
     }
 }
 
-void morph_faces(
+void control_faces(
+    cv::Mat &render_image,
     cv::Mat &src_image, const std::vector<cv::Point> &src_landmarks,
     cv::Mat &dst_image, const std::vector<cv::Point> &dst_landmarks)
 {
-    cv::Subdiv2D src_subdiv(cv::Rect(0, 0, src_image.cols, src_image.rows));
+    using namespace cv;
+
+    int width = src_image.cols;
+    int height = src_image.rows;
+
+    Subdiv2D src_subdiv(Rect(0, 0, src_image.cols, src_image.rows));
     for (int i = 0; i < (int)src_landmarks.size(); i++)
-        src_subdiv.insert(cv::Point2f(src_landmarks[i].x, src_landmarks[i].y));
+        src_subdiv.insert(Point2f(src_landmarks[i].x, src_landmarks[i].y));
 
     draw_delaunay(src_image, src_subdiv, cvScalar(255, 255, 255));
+
+    Mat control_image = Mat(src_image.size(), CV_8UC3, 0);
+    
+    //src_image.copyTo(render_image(Rect(0, 0, width, height)));
+    //control_image.copyTo(composite_image(Rect(width, 0, width, height)));
 }
 
 cv::Mat load_celebrity_info(
@@ -216,8 +227,12 @@ int main(int, char**)
         cv::Mat frame;
         cap >> frame;
 
+        int width = frame.cols;
+        int height = frame.rows;
+
         cv::Mat image;
         cv::flip(frame, image, 1);
+        cv::Mat display_image = image;
 
         cv::Mat gray_image;
         cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
@@ -237,19 +252,23 @@ int main(int, char**)
      
         if (is_in_morphing_mode)
         {
+            cv::Mat render_image(cv::Size(width * 2, height), CV_8UC3, cv::Scalar(0));
+            image.copyTo(render_image(cv::Rect(0, 0, width, height)));
             if (!faces.empty())
             {
                 cv::Rect face_rect = faces[0];
                 std::vector<cv::Point> face_landmarks;
                 detect_landmarks(face_shape_predictor, image, face_rect, face_landmarks);
-                morph_faces(image, face_landmarks, brad_pitt_img, brad_pitt_landmarks);
+                control_faces(
+                    render_image,
+                    image, face_landmarks, 
+                    brad_pitt_img, brad_pitt_landmarks);
             }
-                
+            display_image = render_image;
         }
 
-        draw_faces(image, faces);
-
-        cv::imshow(window_name, image);
+        draw_faces(display_image, faces);
+        cv::imshow(window_name, display_image);
         
         int key_code = cv::waitKey(10);
         bool is_leaving = (key_code == ESCAPE_KEY_CODE);
