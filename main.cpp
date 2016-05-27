@@ -52,14 +52,14 @@ void draw_faces(const cv::Mat &image, std::vector<cv::Rect> &faces)
     }
 }
 
-void detect_faces(cv::CascadeClassifier *p_face_cascade, const cv::Mat &gray_image, std::vector<cv::Rect> &faces)
+void detect_faces(cv::CascadeClassifier &face_cascade, const cv::Mat &gray_image, std::vector<cv::Rect> &faces)
 {
     using namespace cv;
 
     faces.clear();
 
     equalizeHist(gray_image, gray_image);
-    p_face_cascade->detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
+    face_cascade.detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
 }
 
 int track_faces(std::vector<cv::Rect> &faces)
@@ -87,7 +87,7 @@ void draw_landmarks(cv::Mat &image, const dlib::full_object_detection &face_shap
     }
 }
 
-void align_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape_predictor *p_shape_predictor)
+void detect_landmarks(dlib::shape_predictor &face_shape_predictor, cv::Mat &image, const std::vector<cv::Rect> &faces)
 {
     if (faces.empty())
         return;
@@ -109,23 +109,23 @@ void align_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape
         } 
     }
 
-    dlib::full_object_detection shape = (*p_shape_predictor)(dlib_image, dlib_face);
+    dlib::full_object_detection shape = face_shape_predictor(dlib_image, dlib_face);
     draw_landmarks(image, shape);
 }
 
-void morph_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape_predictor *p_shape_predictor)
+void morph_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape_predictor &face_shape_predictor)
 {
-    align_faces(image, faces, p_shape_predictor);
+    detect_landmarks(face_shape_predictor, image, faces);
 }
 
 int main(int, char**)
 {
-    cv::CascadeClassifier *p_face_cascade = new cv::CascadeClassifier();
-    if (!p_face_cascade->load(face_cascade_name))
+    cv::CascadeClassifier face_cascade;
+    if (!face_cascade.load(face_cascade_name))
         return error_happened(ER_LOAD_FACE_MODULE);
 
-    dlib::shape_predictor *p_shape_predictor = new dlib::shape_predictor();
-    dlib::deserialize(face_shape_path.c_str()) >> *p_shape_predictor;
+    dlib::shape_predictor face_shape_predictor;
+    dlib::deserialize(face_shape_path.c_str()) >> face_shape_predictor;
 
     cv::VideoCapture cap(0);
     if (!cap.isOpened())
@@ -147,19 +147,19 @@ int main(int, char**)
 
         if (faces.empty())
         {
-            detect_faces(p_face_cascade, gray_image, faces);
+            detect_faces(face_cascade, gray_image, faces);
         } 
         else
         {
             if (track_faces(faces) <= 0)
             {
                 // when tracking failed, re-detect faces
-                detect_faces(p_face_cascade, gray_image, faces);
+                detect_faces(face_cascade, gray_image, faces);
             }
         }
      
         if (is_in_morphing_mode)
-            morph_faces(image, faces, p_shape_predictor);
+            morph_faces(image, faces, face_shape_predictor);
 
         draw_faces(image, faces);
 
@@ -174,9 +174,6 @@ int main(int, char**)
         if (key_code == SPACE_KEY_CODE)
             is_in_morphing_mode = !is_in_morphing_mode; 
     }
-
-    delete p_shape_predictor;
-    delete p_face_cascade;
 
     return 0;
 }
