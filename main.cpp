@@ -123,19 +123,17 @@ void detect_landmarks(dlib::shape_predictor &face_shape_predictor,
     draw_landmarks(image, face_landmarks);
 }
 
-void draw_delaunay(cv::Mat& img, cv::Subdiv2D& subdiv, cv::Scalar delaunay_color)
+void draw_triangles(cv::Mat& img, const std::vector<cv::Vec6f> &triangles, cv::Scalar delaunay_color)
 {
     using namespace cv;
-
-    vector<Vec6f> triangleList;
-    subdiv.getTriangleList(triangleList);
-    vector<Point> pt(3);
+ 
     Size size = img.size();
     Rect rect(0, 0, size.width, size.height);
 
-    for (size_t i = 0; i < triangleList.size(); i++)
+    vector<Point> pt(3);
+    for (size_t i = 0; i < triangles.size(); i++)
     {
-        Vec6f t = triangleList[i];
+        const Vec6f &t = triangles[i];
         pt[0] = Point(cvRound(t[0]), cvRound(t[1]));
         pt[1] = Point(cvRound(t[2]), cvRound(t[3]));
         pt[2] = Point(cvRound(t[4]), cvRound(t[5]));
@@ -150,6 +148,25 @@ void draw_delaunay(cv::Mat& img, cv::Subdiv2D& subdiv, cv::Scalar delaunay_color
     }
 }
 
+void warp_image_by_trangles(
+    cv::Mat &src_image, const std::vector<cv::Point2f> &src_triangles,
+    cv::Mat &dst_image, const std::vector<cv::Point2f> &dst_triangles
+    )
+{
+
+}
+
+void get_triangles(cv::Mat &image, const std::vector<cv::Point> &landmarks, std::vector<cv::Vec6f> &triangles)
+{
+    using namespace cv;
+
+    Subdiv2D subdiv(Rect(0, 0, image.cols, image.rows));
+    for (int i = 0; i < (int)landmarks.size(); i++)
+        subdiv.insert(Point2f(landmarks[i].x, landmarks[i].y));
+
+    subdiv.getTriangleList(triangles);
+}
+
 void control_faces(
     cv::Mat &render_image,
     cv::Mat &src_image, const std::vector<cv::Point> &src_landmarks,
@@ -160,16 +177,15 @@ void control_faces(
     int width = src_image.cols;
     int height = src_image.rows;
 
-    Subdiv2D src_subdiv(Rect(0, 0, src_image.cols, src_image.rows));
-    for (int i = 0; i < (int)src_landmarks.size(); i++)
-        src_subdiv.insert(Point2f(src_landmarks[i].x, src_landmarks[i].y));
+    std::vector<Vec6f> src_triangles;
+    get_triangles(src_image, src_landmarks, src_triangles);
 
-    draw_delaunay(src_image, src_subdiv, cvScalar(255, 255, 255));
+    std::vector<Vec6f> dst_triangles;
+    get_triangles(dst_image, dst_landmarks, dst_triangles);
 
-    Mat control_image = Mat(src_image.size(), CV_8UC3, 0);
-    
-    //src_image.copyTo(render_image(Rect(0, 0, width, height)));
-    //control_image.copyTo(composite_image(Rect(width, 0, width, height)));
+    Mat control_image = Mat(src_image.size(), CV_8UC3, Scalar(0));
+
+    draw_triangles(src_image, src_triangles, cvScalar(255, 255, 255));
 }
 
 cv::Mat load_celebrity_info(
@@ -253,7 +269,6 @@ int main(int, char**)
         if (is_in_morphing_mode)
         {
             cv::Mat render_image(cv::Size(width * 2, height), CV_8UC3, cv::Scalar(0));
-            image.copyTo(render_image(cv::Rect(0, 0, width, height)));
             if (!faces.empty())
             {
                 cv::Rect face_rect = faces[0];
@@ -264,6 +279,7 @@ int main(int, char**)
                     image, face_landmarks, 
                     brad_pitt_img, brad_pitt_landmarks);
             }
+            image.copyTo(render_image(cv::Rect(0, 0, width, height)));
             display_image = render_image;
         }
 
