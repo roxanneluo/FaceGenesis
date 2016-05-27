@@ -16,18 +16,21 @@ using namespace std;
 enum ErrorType
 {
     ER_LOAD_FACE_MODULE = 0,
-    ER_OPEN_WEBCAM
+    ER_OPEN_WEBCAM,
+    ER_OPEN_CELEBRITY_IMAGE
 };
 
 const char *error_msgs[] = 
 {
     "Can't load face module",
-    "Can't open webcam"
+    "Can't open webcam",
+    "Can't load celebrity image"
 };
 
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
 std::string window_name = "faceOff";
+std::string brad_pitt_path = "brad_pitt.bmp";
 
 int error_happened(const ErrorType error_type)
 {
@@ -71,20 +74,20 @@ int track_faces(std::vector<cv::Rect> &faces)
     return (int)faces.size();
 }
 
-void draw_landmarks(cv::Mat &image, const dlib::full_object_detection &face_shape)
+void draw_landmarks(cv::Mat &image, const std::vector<cv::Point> &landmarks)
 {
     cv::Scalar blue_color = cv::Scalar(255, 0, 0);
-    int total_landmark = face_shape.num_parts();
-    for (int i = 0; i < total_landmark; i++)
+    for (int i = 0; i < (int)landmarks.size(); i++)
     {
-        dlib::point landmark = face_shape.part(i);
         cv::circle(
-            image, cv::Point(landmark.x(), landmark.y()),
+            image, landmarks[i],
             3, blue_color);
     }
 }
 
-void detect_landmarks(dlib::shape_predictor &face_shape_predictor, cv::Mat &image, const cv::Rect &face_rect)
+void detect_landmarks(dlib::shape_predictor &face_shape_predictor, 
+                      cv::Mat &image, const cv::Rect &face_rect, 
+                      std::vector<cv::Point> &face_landmarks)
 {
     int left   = face_rect.x;
     int top    = face_rect.y;
@@ -108,12 +111,50 @@ void detect_landmarks(dlib::shape_predictor &face_shape_predictor, cv::Mat &imag
     }
 
     dlib::full_object_detection shape = face_shape_predictor(dlib_image, dlib_face);
-    draw_landmarks(image, shape);
+
+    int total_landmark = shape.num_parts();
+    face_landmarks.resize(total_landmark);
+    for (int i = 0; i < total_landmark; i++)
+    {
+        dlib::point landmark = shape.part(i);
+        face_landmarks[i] = cv::Point(landmark.x(), landmark.y());
+    }
+
+    draw_landmarks(image, face_landmarks);
 }
 
 void morph_faces(cv::Mat &image, const cv::Rect &src_face, const cv::Rect &dst_face, dlib::shape_predictor &face_shape_predictor)
 {
-    detect_landmarks(face_shape_predictor, image, src_face);
+    std::vector<cv::Point> src_landmarks;
+    detect_landmarks(face_shape_predictor, image, src_face, src_landmarks);
+}
+
+cv::Mat load_celebrity_info(
+    const char *path, 
+    cv::Rect &face_rect, std::vector<cv::Point> &face_landmark, 
+    cv::CascadeClassifier &face_cascade, dlib::shape_predictor &face_shape_predictor)
+{
+    cv::Mat celebrity_img;
+    celebrity_img = cv::imread(path);
+    if (celebrity_img.empty())
+        return celebrity_img;
+
+    cv::Mat gray_celebrity_img;
+    cv::cvtColor(celebrity_img, gray_celebrity_img, cv::COLOR_BGR2GRAY);
+
+    std::vector<cv::Rect> faces;
+    detect_faces(face_cascade, gray_celebrity_img, faces);
+    if (!faces.empty())
+    {
+        face_rect = faces[0];
+        detect_landmarks(face_shape_predictor, celebrity_img, face_rect, face_landmark);
+    }   
+    else
+    {
+        celebrity_img.release();
+    }
+
+    return celebrity_img;
 }
 
 int main(int, char**)
@@ -128,6 +169,12 @@ int main(int, char**)
     cv::VideoCapture cap(0);
     if (!cap.isOpened())
         return error_happened(ER_OPEN_WEBCAM);
+
+    std::vector<cv::Point> brad_pitt_landmarks;
+    cv::Rect brad_pitt_face;
+    cv::Mat brad_pitt_img = load_celebrity_info(brad_pitt_path.c_str(), brad_pitt_face, brad_pitt_landmarks, face_cascade, face_shape_predictor);
+    if (brad_pitt_img.empty())
+        return error_happened(ER_OPEN_CELEBRITY_IMAGE);
 
     cv::namedWindow(window_name, 1);
     std::vector<cv::Rect> faces;
