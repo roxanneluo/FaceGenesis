@@ -123,10 +123,42 @@ void detect_landmarks(dlib::shape_predictor &face_shape_predictor,
     draw_landmarks(image, face_landmarks);
 }
 
-void morph_faces(cv::Mat &image, const cv::Rect &src_face, const cv::Rect &dst_face, dlib::shape_predictor &face_shape_predictor)
+void draw_delaunay(cv::Mat& img, cv::Subdiv2D& subdiv, cv::Scalar delaunay_color)
 {
-    std::vector<cv::Point> src_landmarks;
-    detect_landmarks(face_shape_predictor, image, src_face, src_landmarks);
+    using namespace cv;
+
+    vector<Vec6f> triangleList;
+    subdiv.getTriangleList(triangleList);
+    vector<Point> pt(3);
+    Size size = img.size();
+    Rect rect(0, 0, size.width, size.height);
+
+    for (size_t i = 0; i < triangleList.size(); i++)
+    {
+        Vec6f t = triangleList[i];
+        pt[0] = Point(cvRound(t[0]), cvRound(t[1]));
+        pt[1] = Point(cvRound(t[2]), cvRound(t[3]));
+        pt[2] = Point(cvRound(t[4]), cvRound(t[5]));
+
+        // Draw rectangles completely inside the image.
+        if (rect.contains(pt[0]) && rect.contains(pt[1]) && rect.contains(pt[2]))
+        {
+            line(img, pt[0], pt[1], delaunay_color, 1, CV_AA, 0);
+            line(img, pt[1], pt[2], delaunay_color, 1, CV_AA, 0);
+            line(img, pt[2], pt[0], delaunay_color, 1, CV_AA, 0);
+        }
+    }
+}
+
+void morph_faces(
+    cv::Mat &src_image, const std::vector<cv::Point> &src_landmarks,
+    cv::Mat &dst_image, const std::vector<cv::Point> &dst_landmarks)
+{
+    cv::Subdiv2D src_subdiv(cv::Rect(0, 0, src_image.cols, src_image.rows));
+    for (int i = 0; i < (int)src_landmarks.size(); i++)
+        src_subdiv.insert(cv::Point2f(src_landmarks[i].x, src_landmarks[i].y));
+
+    draw_delaunay(src_image, src_subdiv, cvScalar(255, 255, 255));
 }
 
 cv::Mat load_celebrity_info(
@@ -206,7 +238,13 @@ int main(int, char**)
         if (is_in_morphing_mode)
         {
             if (!faces.empty())
-                morph_faces(image, faces[0], faces[0], face_shape_predictor);
+            {
+                cv::Rect face_rect = faces[0];
+                std::vector<cv::Point> face_landmarks;
+                detect_landmarks(face_shape_predictor, image, face_rect, face_landmarks);
+                morph_faces(image, face_landmarks, brad_pitt_img, brad_pitt_landmarks);
+            }
+                
         }
 
         draw_faces(image, faces);
