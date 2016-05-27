@@ -6,7 +6,11 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-using namespace cv;
+#include <dlib/image_processing/frontal_face_detector.h>
+#include <dlib/image_processing.h>
+#include <dlib/gui_widgets.h>
+#include <dlib/image_io.h>
+
 using namespace std;
 
 #define SPACE_KEY_CODE   32
@@ -24,8 +28,9 @@ const char *error_msgs[] =
     "Can't open webcam"
 };
 
-String face_cascade_name = "haarcascade_frontalface_alt.xml";
-string window_name = "faceOff";
+std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
+std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
+std::string window_name = "faceOff";
 
 int error_happened(const ErrorType error_type)
 {
@@ -33,8 +38,10 @@ int error_happened(const ErrorType error_type)
     return -1;
 }
 
-void draw_faces(const Mat &image, vector<Rect> &faces)
+void draw_faces(const cv::Mat &image, std::vector<cv::Rect> &faces)
 {
+    using namespace cv;
+
     Scalar red_color = Scalar(0, 0, 255);
     for (size_t i = 0; i < faces.size(); i++)
     {
@@ -45,15 +52,17 @@ void draw_faces(const Mat &image, vector<Rect> &faces)
     }
 }
 
-void detect_faces(CascadeClassifier *p_face_cascade, const Mat &gray_image, vector<Rect> &faces)
+void detect_faces(cv::CascadeClassifier *p_face_cascade, const cv::Mat &gray_image, std::vector<cv::Rect> &faces)
 {
+    using namespace cv;
+
     faces.clear();
 
     equalizeHist(gray_image, gray_image);
     p_face_cascade->detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
 }
 
-int track_faces(vector<Rect> &faces)
+int track_faces(std::vector<cv::Rect> &faces)
 {
     // do face tracking here
     // return number of succeeded tracked faces
@@ -65,35 +74,76 @@ int track_faces(vector<Rect> &faces)
     return (int)faces.size();
 }
 
-void morph_faces(Mat &image, const vector<Rect> &faces)
+void draw_landmarks(cv::Mat &image, const dlib::full_object_detection &face_shape)
 {
-    cout << "morph face" << endl;
+    cv::Scalar blue_color = cv::Scalar(255, 0, 0);
+    int total_landmark = face_shape.num_parts();
+    for (int i = 0; i < total_landmark; i++)
+    {
+        dlib::point landmark = face_shape.part(i);
+        cv::circle(
+            image, cv::Point(landmark.x(), landmark.y()),
+            3, blue_color);
+    }
+}
+
+void align_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape_predictor *p_shape_predictor)
+{
+    if (faces.empty())
+        return;
+
+    dlib::rectangle dlib_face = dlib::rectangle(faces[0].x, faces[0].y, faces[0].x + faces[0].width, faces[0].y + faces[0].height);
+
+    int width = image.cols;
+    int height = image.rows;
+    int channel = image.channels();
+
+    dlib::array2d<dlib::rgb_pixel> dlib_image(height, width);
+    for (int y = 0; y < height; y++)
+    {
+        uchar* p_data = image.ptr<uchar>(y);
+        for (int x = 0; x < width; x++)
+        {
+            dlib_image[y][x] = dlib::rgb_pixel(p_data[2], p_data[1], p_data[0]);
+            p_data += channel;
+        } 
+    }
+
+    dlib::full_object_detection shape = (*p_shape_predictor)(dlib_image, dlib_face);
+    draw_landmarks(image, shape);
+}
+
+void morph_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape_predictor *p_shape_predictor)
+{
+    align_faces(image, faces, p_shape_predictor);
 }
 
 int main(int, char**)
 {
-    CascadeClassifier *p_face_cascade = new CascadeClassifier();
-
+    cv::CascadeClassifier *p_face_cascade = new cv::CascadeClassifier();
     if (!p_face_cascade->load(face_cascade_name))
         return error_happened(ER_LOAD_FACE_MODULE);
 
-    VideoCapture cap(0); 
+    dlib::shape_predictor *p_shape_predictor = new dlib::shape_predictor();
+    dlib::deserialize(face_shape_path.c_str()) >> *p_shape_predictor;
+
+    cv::VideoCapture cap(0);
     if (!cap.isOpened())
         return error_happened(ER_OPEN_WEBCAM);
 
-    namedWindow(window_name, 1);
-    vector<Rect> faces;
+    cv::namedWindow(window_name, 1);
+    std::vector<cv::Rect> faces;
     bool is_in_morphing_mode = false;
     for (;;)
     {
-        Mat frame;
+        cv::Mat frame;
         cap >> frame;
 
-        Mat image;
-        flip(frame, image, 1);
+        cv::Mat image;
+        cv::flip(frame, image, 1);
 
-        Mat gray_image;
-        cvtColor(image, gray_image, COLOR_BGR2GRAY);
+        cv::Mat gray_image;
+        cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
 
         if (faces.empty())
         {
@@ -109,13 +159,13 @@ int main(int, char**)
         }
      
         if (is_in_morphing_mode)
-            morph_faces(image, faces);
+            morph_faces(image, faces, p_shape_predictor);
 
         draw_faces(image, faces);
 
-        imshow(window_name, image);
+        cv::imshow(window_name, image);
         
-        int key_code = waitKey(10);
+        int key_code = cv::waitKey(10);
         bool is_leaving = (key_code == ESCAPE_KEY_CODE);
         if (is_leaving)
             break;
@@ -125,6 +175,7 @@ int main(int, char**)
             is_in_morphing_mode = !is_in_morphing_mode; 
     }
 
+    delete p_shape_predictor;
     delete p_face_cascade;
 
     return 0;
