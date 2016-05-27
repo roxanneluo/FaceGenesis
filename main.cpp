@@ -84,12 +84,13 @@ void draw_landmarks(cv::Mat &image, const dlib::full_object_detection &face_shap
     }
 }
 
-void detect_landmarks(dlib::shape_predictor &face_shape_predictor, cv::Mat &image, const std::vector<cv::Rect> &faces)
+void detect_landmarks(dlib::shape_predictor &face_shape_predictor, cv::Mat &image, const cv::Rect &face_rect)
 {
-    if (faces.empty())
-        return;
-
-    dlib::rectangle dlib_face = dlib::rectangle(faces[0].x, faces[0].y, faces[0].x + faces[0].width, faces[0].y + faces[0].height);
+    int left   = face_rect.x;
+    int top    = face_rect.y;
+    int right  = face_rect.x + face_rect.width;
+    int bottom = face_rect.y + face_rect.height;
+    dlib::rectangle dlib_face = dlib::rectangle(left, top, right, bottom);
 
     int width = image.cols;
     int height = image.rows;
@@ -110,9 +111,9 @@ void detect_landmarks(dlib::shape_predictor &face_shape_predictor, cv::Mat &imag
     draw_landmarks(image, shape);
 }
 
-void morph_faces(cv::Mat &image, const std::vector<cv::Rect> &faces, dlib::shape_predictor &face_shape_predictor)
+void morph_faces(cv::Mat &image, const cv::Rect &src_face, const cv::Rect &dst_face, dlib::shape_predictor &face_shape_predictor)
 {
-    detect_landmarks(face_shape_predictor, image, faces);
+    detect_landmarks(face_shape_predictor, image, src_face);
 }
 
 int main(int, char**)
@@ -156,7 +157,10 @@ int main(int, char**)
         }
      
         if (is_in_morphing_mode)
-            morph_faces(image, faces, face_shape_predictor);
+        {
+            if (!faces.empty())
+                morph_faces(image, faces[0], faces[0], face_shape_predictor);
+        }
 
         draw_faces(image, faces);
 
