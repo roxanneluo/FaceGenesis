@@ -38,6 +38,56 @@ int error_happened(const ErrorType error_type)
     return -1;
 }
 
+class MySubdiv2D : public cv::Subdiv2D
+{
+public:
+    MySubdiv2D(cv::Rect rect)
+        :cv::Subdiv2D(rect)
+    {
+
+    }
+
+    // skips "outer" triangles.
+    void getTriangleIndices(vector<int> &indices) const
+    {
+        using namespace cv;
+
+        int i, total = (int)(qedges.size() * 4);
+        std::vector<bool> edgemask(total, false);
+
+        for (i = 4; i < total; i += 2)
+        {
+            if (edgemask[i])
+                continue;
+
+            int index[3];
+            Point2f a, b, c;
+            int edge = i;
+            
+            index[0] = edgeOrg(edge, &a);
+            if (index[0] < 4)
+                continue;
+            edgemask[edge] = true;
+            
+            edge = getEdge(edge, NEXT_AROUND_LEFT);
+            index[1] = edgeOrg(edge, &b);
+            if (index[1] < 4)
+                continue;
+            edgemask[edge] = true;
+            
+            edge = getEdge(edge, NEXT_AROUND_LEFT);
+            index[2] = edgeOrg(edge, &c);
+            if (index[2] < 4)
+                continue;
+            edgemask[edge] = true;
+
+            indices.push_back(index[0]-4);
+            indices.push_back(index[1]-4);
+            indices.push_back(index[2]-4);
+        }
+    }
+};
+
 void draw_faces(const cv::Mat &image, std::vector<cv::Rect> &faces)
 {
     using namespace cv;
@@ -119,8 +169,6 @@ void detect_landmarks(dlib::shape_predictor &face_shape_predictor,
         dlib::point landmark = shape.part(i);
         face_landmarks[i] = cv::Point(landmark.x(), landmark.y());
     }
-
-    draw_landmarks(image, face_landmarks);
 }
 
 void draw_triangles(cv::Mat& img, const std::vector<cv::Vec6f> &triangles, cv::Scalar delaunay_color)
@@ -149,22 +197,70 @@ void draw_triangles(cv::Mat& img, const std::vector<cv::Vec6f> &triangles, cv::S
 }
 
 void warp_image_by_trangles(
-    cv::Mat &src_image, const std::vector<cv::Point2f> &src_triangles,
-    cv::Mat &dst_image, const std::vector<cv::Point2f> &dst_triangles
+    cv::Mat &src_image, const cv::Vec6f &src_triangle,
+    cv::Mat &dst_image, const cv::Vec6f &dst_triangle
     )
-{
-
-}
-
-void get_triangles(cv::Mat &image, const std::vector<cv::Point> &landmarks, std::vector<cv::Vec6f> &triangles)
 {
     using namespace cv;
 
-    Subdiv2D subdiv(Rect(0, 0, image.cols, image.rows));
+    std::vector<Point2f> src_pts;
+    std::vector<Point2f> dst_pts;
+    for (int i = 0; i < 3; i++)
+    {
+        src_pts.push_back(Point2f(src_triangle[i * 2], src_triangle[i * 2 + 1]));
+        dst_pts.push_back(Point2f(dst_triangle[i * 2], dst_triangle[i * 2 + 1]));
+    }
+    Rect src_roi = boundingRect(src_pts);
+    Rect dst_roi = boundingRect(dst_pts);
+
+    std::vector<Point2f> shift_src_pts;
+    std::vector<Point2f> shift_dst_pts;
+    for (int i = 0; i < 3; i++)
+    {
+        shift_src_pts.push_back(Point2f(src_pts[i].x - src_roi.x, src_pts[i].y - src_roi.y));
+        shift_dst_pts.push_back(Point2f(dst_pts[i].x - dst_roi.x, dst_pts[i].y - dst_roi.y));
+    }
+
+    Mat affine_matrix = getAffineTransform(shift_src_pts, shift_dst_pts);
+        
+    Mat src_roi_image;
+    src_image(src_roi).copyTo(src_roi_image);
+    Mat dst_roi_image(Size(dst_roi.width, dst_roi.height), CV_8UC3, Scalar(0));
+    warpAffine(src_roi_image, dst_roi_image, affine_matrix, dst_roi_image.size(), INTER_LINEAR, BORDER_CONSTANT);
+
+    Mat mask(Size(dst_roi.width, dst_roi.height), CV_8UC1, Scalar(0));
+    std::vector<Point> shift_dst_ptsI;
+    for (int i = 0; i < 3; i++)
+    {
+        shift_dst_ptsI.push_back(Point(shift_dst_pts[i].x, shift_dst_pts[i].y));
+    }
+    fillConvexPoly(mask, shift_dst_ptsI, Scalar(255));
+    dst_roi_image.copyTo(dst_image(dst_roi), mask);
+}
+
+void get_triangles(
+    cv::Mat &image, const std::vector<cv::Point> &landmarks, 
+    std::vector<cv::Vec6f> &triangles, std::vector<int> &triangle_indices)
+{
+    using namespace cv;
+
+    MySubdiv2D subdiv(Rect(0, 0, image.cols, image.rows));
     for (int i = 0; i < (int)landmarks.size(); i++)
         subdiv.insert(Point2f(landmarks[i].x, landmarks[i].y));
-
-    subdiv.getTriangleList(triangles);
+        
+    subdiv.getTriangleIndices(triangle_indices);
+    
+    for (int i = 0; i < (int)triangle_indices.size(); i += 3)
+    {
+        Vec6f t;
+        t[0] = landmarks[triangle_indices[i]].x;
+        t[1] = landmarks[triangle_indices[i]].y;
+        t[2] = landmarks[triangle_indices[i + 1]].x;
+        t[3] = landmarks[triangle_indices[i + 1]].y;
+        t[4] = landmarks[triangle_indices[i + 2]].x;
+        t[5] = landmarks[triangle_indices[i + 2]].y;
+        triangles.push_back(t);
+    }
 }
 
 void control_faces(
@@ -177,15 +273,30 @@ void control_faces(
     int width = src_image.cols;
     int height = src_image.rows;
 
-    std::vector<Vec6f> src_triangles;
-    get_triangles(src_image, src_landmarks, src_triangles);
-
     std::vector<Vec6f> dst_triangles;
-    get_triangles(dst_image, dst_landmarks, dst_triangles);
+    std::vector<int> dst_triangle_indices;
+    get_triangles(dst_image, dst_landmarks, dst_triangles, dst_triangle_indices);
+
+    std::vector<Vec6f> src_triangles;
+    for (int i = 0; i < (int)dst_triangle_indices.size(); i+=3)
+    {
+        Vec6f t;
+        t[0] = src_landmarks[dst_triangle_indices[i]].x;
+        t[1] = src_landmarks[dst_triangle_indices[i]].y;
+        t[2] = src_landmarks[dst_triangle_indices[i+1]].x;
+        t[3] = src_landmarks[dst_triangle_indices[i+1]].y;
+        t[4] = src_landmarks[dst_triangle_indices[i+2]].x;
+        t[5] = src_landmarks[dst_triangle_indices[i+2]].y;
+        src_triangles.push_back(t);
+    }
+
+    assert(src_triangles.size() == dst_triangles.size());
 
     Mat control_image = Mat(src_image.size(), CV_8UC3, Scalar(0));
+    for (size_t i = 0; i < src_triangles.size(); i++)
+        warp_image_by_trangles(dst_image, dst_triangles[i], control_image, src_triangles[i]);
 
-    draw_triangles(src_image, src_triangles, cvScalar(255, 255, 255));
+    control_image.copyTo(render_image(Rect(width, 0, width, height)));
 }
 
 cv::Mat load_celebrity_info(
