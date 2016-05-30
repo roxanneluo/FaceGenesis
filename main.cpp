@@ -390,6 +390,8 @@ public:
     }
     void end_session()
     {
+        if (m_is_in_animation)
+            end_animation();
     }
 
     cv::Mat get_image(
@@ -485,7 +487,6 @@ protected:
             break;
 
         case PUPPETRY:
-            
             if (m_celebrity_index > 0)
             {
                 m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index - 1].image, m_celebrities[m_celebrity_index - 1].landmarks);
