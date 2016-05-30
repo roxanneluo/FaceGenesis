@@ -7,6 +7,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <dlib/image_processing.h>
+#include <kcf_tracker/kcftracker.hpp>
 
 using namespace std;
 
@@ -112,16 +113,18 @@ void detect_faces(cv::CascadeClassifier &face_cascade, const cv::Mat &gray_image
     face_cascade.detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
 }
 
-int track_faces(std::vector<cv::Rect> &faces)
+int track_faces(const cv::Mat& image, std::vector<cv::Rect> &faces)
 {
-    // do face tracking here
-    // return number of succeeded tracked faces
-    
-    // temporally, we clear all detected faces here
-    // the code should be removed when a face tracking algorithm is implemented.
-    faces.clear();
-
-    return (int)faces.size();
+  static KCFTracker tracker;
+  static bool init = false;
+  if (!init) {
+    tracker.init(faces[0], image);
+    init = true;
+  }
+  faces.clear();
+  faces.push_back(tracker.update(image));
+  
+  return (int)faces.size();
 }
 
 void draw_landmarks(cv::Mat &image, const std::vector<cv::Point> &landmarks)
@@ -370,7 +373,7 @@ int main(int, char**)
         } 
         else
         {
-            if (track_faces(faces) <= 0)
+            if (track_faces(image, faces) <= 0)
             {
                 // when tracking failed, re-detect faces
                 detect_faces(face_cascade, gray_image, faces);
