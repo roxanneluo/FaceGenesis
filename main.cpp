@@ -30,7 +30,7 @@ const char *error_msgs[] =
 
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
-std::string window_name = "faceOff";
+std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity";
 
 const char* celebrity_paths[] =
 {
