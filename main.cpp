@@ -11,8 +11,9 @@
 
 using namespace std;
 
-#define SPACE_KEY_CODE   32
-#define ESCAPE_KEY_CODE  27
+#define SPACE_KEY_CODE   0x20
+#define ESCAPE_KEY_CODE  0x1B
+#define N_KEY_CODE       0x6E
 
 enum ErrorType
 {
@@ -30,7 +31,15 @@ const char *error_msgs[] =
 
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
-std::string window_name = "faceOff";
+std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity";
+
+const char* celebrity_paths[] =
+{
+    "brad_pitt.bmp",
+    "obama.bmp",
+    "tom_hanks.bmp"
+};
+
 std::string brad_pitt_path = "brad_pitt.bmp";
 
 int error_happened(const ErrorType error_type)
@@ -266,8 +275,7 @@ void get_triangles(
     }
 }
 
-void control_faces(
-    cv::Mat &render_image,
+cv::Mat control_faces(
     cv::Mat &src_image, const std::vector<cv::Point> &src_landmarks,
     cv::Mat &dst_image, const std::vector<cv::Point> &dst_landmarks)
 {
@@ -299,12 +307,19 @@ void control_faces(
     for (size_t i = 0; i < src_triangles.size(); i++)
         warp_image_by_trangles(dst_image, dst_triangles[i], control_image, src_triangles[i]);
 
-    control_image.copyTo(render_image(Rect(width, 0, width, height)));
+    return control_image;
 }
 
+struct CelebrityInfo
+{
+    cv::Mat image;
+    cv::Rect face_rect;
+    std::vector<cv::Point> landmarks;
+};
+
 cv::Mat load_celebrity_info(
-    const char *path, 
-    cv::Rect &face_rect, std::vector<cv::Point> &face_landmark, 
+    const char *path,
+    cv::Rect &face_rect, std::vector<cv::Point> &face_landmark,
     cv::CascadeClassifier &face_cascade, dlib::shape_predictor &face_shape_predictor)
 {
     cv::Mat celebrity_img;
@@ -321,7 +336,7 @@ cv::Mat load_celebrity_info(
     {
         face_rect = faces[0];
         detect_landmarks(face_shape_predictor, celebrity_img, face_rect, face_landmark);
-    }   
+    }
     else
     {
         celebrity_img.release();
@@ -330,23 +345,212 @@ cv::Mat load_celebrity_info(
     return celebrity_img;
 }
 
+class CelebrityMorpher
+{
+public:
+    CelebrityMorpher()
+    {
+        m_mode = SELF_PORTRAINT;
+        m_celebrity_amount = 0;
+        m_celebrity_index = 0;
+
+        m_is_in_animation = false;
+    }
+    ~CelebrityMorpher(){}
+
+    bool init(cv::CascadeClassifier &face_cascade, dlib::shape_predictor &face_shape_predictor)
+    {
+        bool is_init_ok = true;
+
+        int celebrity_amount = sizeof(celebrity_paths) / sizeof(const char*);
+        for (int i = 0; i < celebrity_amount; i++)
+        {
+            m_celebrities.push_back(CelebrityInfo());
+            CelebrityInfo &info = m_celebrities.back();
+            info.image = load_celebrity_info(
+                celebrity_paths[i], 
+                info.face_rect, info.landmarks, 
+                face_cascade, face_shape_predictor);
+            if (info.image.empty())
+            {
+                is_init_ok = false;
+                break;
+            }
+        }
+
+        if (is_init_ok)
+            m_celebrity_amount = celebrity_amount;
+
+        return is_init_ok;
+    }
+
+    void start_session()
+    {
+        m_mode = SELF_PORTRAINT;
+        m_celebrity_index = 0;
+
+        m_is_in_animation = false;
+    }
+    void end_session()
+    {
+        if (m_is_in_animation)
+            end_animation();
+    }
+
+    cv::Mat get_image(
+        cv::Mat &render_image,
+        cv::Mat &src_image, const cv::Rect &src_face_rect,
+        dlib::shape_predictor &face_shape_predictor)
+    {
+        if (m_is_in_animation)
+            return get_animation_frame();
+
+        src_image.copyTo(m_user_image);
+
+        m_user_face_landmarks.clear();
+        detect_landmarks(face_shape_predictor, m_user_image, src_face_rect, m_user_face_landmarks);
+
+        switch (m_mode)
+        {
+        case SELF_PORTRAINT:
+            return control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+
+        case PUPPETRY:
+            return control_faces(
+                m_user_image, m_user_face_landmarks,
+                m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks);
+
+        default:
+            assert(false);
+            break;
+        }
+
+        return cv::Mat();
+    }
+
+    void next()
+    {
+        if (m_is_in_animation)
+            return;
+
+        switch (m_mode)
+        {
+        case SELF_PORTRAINT:
+            m_mode = PUPPETRY;
+            m_celebrity_index = 0;
+            start_animation();
+            break;
+
+        case PUPPETRY:
+            m_celebrity_index++;
+            if (m_celebrity_index >= m_celebrity_amount)
+            {
+                m_celebrity_index = 0;
+                m_mode = SELF_PORTRAINT;
+            }
+            start_animation();
+            break;
+
+        default:
+            assert(false);
+            break;
+        }
+    }
+
+protected:
+    enum
+    {
+        SELF_PORTRAINT = 0,
+        PUPPETRY
+    } m_mode;
+
+    cv::Mat m_animate_start_image;
+    cv::Mat m_animate_end_image;
+
+    cv::Mat m_user_image;
+    std::vector<cv::Point> m_user_face_landmarks;
+    
+    std::vector<CelebrityInfo> m_celebrities;
+    int m_celebrity_amount;
+    int m_celebrity_index;
+
+    bool m_is_in_animation;
+    int m_animation_counter;
+    static int ANIMATE_FRAME_AMOUNT;
+
+    void start_animation()
+    {
+        m_is_in_animation = true;
+        m_animation_counter = 0;
+        switch (m_mode)
+        {
+        case SELF_PORTRAINT:
+            m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_amount - 1].image, m_celebrities[m_celebrity_amount - 1].landmarks);
+            m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+            break;
+
+        case PUPPETRY:
+            if (m_celebrity_index > 0)
+            {
+                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index - 1].image, m_celebrities[m_celebrity_index - 1].landmarks);
+                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks);
+            }
+            else
+            {
+                assert(m_celebrity_index == 0);
+                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[0].image, m_celebrities[0].landmarks);
+            }
+            break;
+
+        default:
+            break;
+        }
+    }
+    void end_animation()
+    {
+        m_is_in_animation = false;
+        m_animation_counter = 0;
+        m_animate_start_image.release();
+        m_animate_end_image.release();
+    }
+
+    cv::Mat get_animation_frame()
+    {
+        double ratio = (double)m_animation_counter / ANIMATE_FRAME_AMOUNT;
+
+        cv::Mat animatation_frame;
+        cv::addWeighted(m_animate_start_image, 1.0 - ratio, m_animate_end_image, ratio, 0, animatation_frame);
+
+        m_animation_counter++;
+        if (m_animation_counter > ANIMATE_FRAME_AMOUNT)
+            end_animation();
+
+        return animatation_frame;
+    }
+};
+int CelebrityMorpher::ANIMATE_FRAME_AMOUNT = 60;
+
+
 int main(int, char**)
 {
+    cout << "load face detector ..." << endl;
     cv::CascadeClassifier face_cascade;
     if (!face_cascade.load(face_cascade_name))
         return error_happened(ER_LOAD_FACE_MODULE);
 
+    cout << "load face landmark detector ..." << endl;
     dlib::shape_predictor face_shape_predictor;
     dlib::deserialize(face_shape_path.c_str()) >> face_shape_predictor;
 
+    cout << "open video camera ..." << endl;
     cv::VideoCapture cap(0);
     if (!cap.isOpened())
         return error_happened(ER_OPEN_WEBCAM);
 
-    std::vector<cv::Point> brad_pitt_landmarks;
-    cv::Rect brad_pitt_face;
-    cv::Mat brad_pitt_img = load_celebrity_info(brad_pitt_path.c_str(), brad_pitt_face, brad_pitt_landmarks, face_cascade, face_shape_predictor);
-    if (brad_pitt_img.empty())
+    cout << "load celebrity models ..." << endl;
+    CelebrityMorpher celebrity_morpher;
+    if (!celebrity_morpher.init(face_cascade, face_shape_predictor))
         return error_happened(ER_OPEN_CELEBRITY_IMAGE);
 
     cv::namedWindow(window_name, 1);
@@ -379,19 +583,16 @@ int main(int, char**)
                 detect_faces(face_cascade, gray_image, faces);
             }
         }
-     
+
+        bool is_has_face = false;
         if (is_in_morphing_mode)
         {
             cv::Mat render_image(cv::Size(width * 2, height), CV_8UC3, cv::Scalar(0));
-            if (!faces.empty())
+            is_has_face = !faces.empty();
+            if (is_has_face)
             {
-                cv::Rect face_rect = faces[0];
-                std::vector<cv::Point> face_landmarks;
-                detect_landmarks(face_shape_predictor, image, face_rect, face_landmarks);
-                control_faces(
-                    render_image,
-                    image, face_landmarks, 
-                    brad_pitt_img, brad_pitt_landmarks);
+                cv::Mat morph_image = celebrity_morpher.get_image(render_image, image, faces[0], face_shape_predictor);
+                morph_image.copyTo(render_image(cv::Rect(width, 0, width, height)));
             }
             image.copyTo(render_image(cv::Rect(0, 0, width, height)));
             display_image = render_image;
@@ -405,9 +606,29 @@ int main(int, char**)
         if (is_leaving)
             break;
 
-        // enter / leave morphing mode
-        if (key_code == SPACE_KEY_CODE)
-            is_in_morphing_mode = !is_in_morphing_mode; 
+        switch (key_code)
+        {
+        case SPACE_KEY_CODE:
+            if (!is_in_morphing_mode)
+            {
+                celebrity_morpher.start_session();
+                is_in_morphing_mode = true;
+            }
+            else
+            {
+                celebrity_morpher.end_session();
+                is_in_morphing_mode = false;
+            }
+            break;
+
+        case N_KEY_CODE:
+            if ((is_in_morphing_mode) && (is_has_face))
+                celebrity_morpher.next();
+            break;
+
+        default:
+            break;
+        }
     }
 
     return 0;
