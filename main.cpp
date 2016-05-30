@@ -30,6 +30,14 @@ const char *error_msgs[] =
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
 std::string window_name = "faceOff";
+
+const char* celebrity_paths[] =
+{
+    "brad_pitt.bmp",
+    "obama.bmp",
+    "tom_hanks.bmp"
+};
+
 std::string brad_pitt_path = "brad_pitt.bmp";
 
 int error_happened(const ErrorType error_type)
@@ -263,8 +271,7 @@ void get_triangles(
     }
 }
 
-void control_faces(
-    cv::Mat &render_image,
+cv::Mat control_faces(
     cv::Mat &src_image, const std::vector<cv::Point> &src_landmarks,
     cv::Mat &dst_image, const std::vector<cv::Point> &dst_landmarks)
 {
@@ -296,12 +303,19 @@ void control_faces(
     for (size_t i = 0; i < src_triangles.size(); i++)
         warp_image_by_trangles(dst_image, dst_triangles[i], control_image, src_triangles[i]);
 
-    control_image.copyTo(render_image(Rect(width, 0, width, height)));
+    return control_image;
 }
 
+struct CelebrityInfo
+{
+    cv::Mat image;
+    cv::Rect face_rect;
+    std::vector<cv::Point> landmarks;
+};
+
 cv::Mat load_celebrity_info(
-    const char *path, 
-    cv::Rect &face_rect, std::vector<cv::Point> &face_landmark, 
+    const char *path,
+    cv::Rect &face_rect, std::vector<cv::Point> &face_landmark,
     cv::CascadeClassifier &face_cascade, dlib::shape_predictor &face_shape_predictor)
 {
     cv::Mat celebrity_img;
@@ -318,7 +332,7 @@ cv::Mat load_celebrity_info(
     {
         face_rect = faces[0];
         detect_landmarks(face_shape_predictor, celebrity_img, face_rect, face_landmark);
-    }   
+    }
     else
     {
         celebrity_img.release();
@@ -327,23 +341,68 @@ cv::Mat load_celebrity_info(
     return celebrity_img;
 }
 
+class CelebrityMorpher
+{
+public:
+    CelebrityMorpher(){}
+    ~CelebrityMorpher(){}
+
+    bool init(cv::CascadeClassifier &face_cascade, dlib::shape_predictor &face_shape_predictor)
+    {
+        bool is_init_ok = true;
+
+        int celebrity_amount = sizeof(celebrity_paths) / sizeof(const char*);
+        for (int i = 0; i < celebrity_amount; i++)
+        {
+            m_celebrities.push_back(CelebrityInfo());
+            CelebrityInfo &info = m_celebrities.back();
+            info.image = load_celebrity_info(
+                celebrity_paths[i], 
+                info.face_rect, info.landmarks, 
+                face_cascade, face_shape_predictor);
+            if (info.image.empty())
+            {
+                is_init_ok = false;
+                break;
+            }
+        }
+
+        return is_init_ok;
+    }
+
+    cv::Mat get_image(
+        cv::Mat &render_image,
+        cv::Mat &src_image, const cv::Rect &src_face_rect,
+        dlib::shape_predictor &face_shape_predictor)
+    {
+        std::vector<cv::Point> src_face_landmarks;
+        detect_landmarks(face_shape_predictor, src_image, src_face_rect, src_face_landmarks);
+        return control_faces(src_image, src_face_landmarks, src_image, src_face_landmarks);
+    }
+
+protected:
+    std::vector<CelebrityInfo> m_celebrities;
+};
+
 int main(int, char**)
 {
+    cout << "load face detector ..." << endl;
     cv::CascadeClassifier face_cascade;
     if (!face_cascade.load(face_cascade_name))
         return error_happened(ER_LOAD_FACE_MODULE);
 
+    cout << "load face landmark detector ..." << endl;
     dlib::shape_predictor face_shape_predictor;
     dlib::deserialize(face_shape_path.c_str()) >> face_shape_predictor;
 
+    cout << "open video camera ..." << endl;
     cv::VideoCapture cap(0);
     if (!cap.isOpened())
         return error_happened(ER_OPEN_WEBCAM);
 
-    std::vector<cv::Point> brad_pitt_landmarks;
-    cv::Rect brad_pitt_face;
-    cv::Mat brad_pitt_img = load_celebrity_info(brad_pitt_path.c_str(), brad_pitt_face, brad_pitt_landmarks, face_cascade, face_shape_predictor);
-    if (brad_pitt_img.empty())
+    cout << "load celebrity models ..." << endl;
+    CelebrityMorpher celebrity_morpher;
+    if (!celebrity_morpher.init(face_cascade, face_shape_predictor))
         return error_happened(ER_OPEN_CELEBRITY_IMAGE);
 
     cv::namedWindow(window_name, 1);
@@ -382,13 +441,8 @@ int main(int, char**)
             cv::Mat render_image(cv::Size(width * 2, height), CV_8UC3, cv::Scalar(0));
             if (!faces.empty())
             {
-                cv::Rect face_rect = faces[0];
-                std::vector<cv::Point> face_landmarks;
-                detect_landmarks(face_shape_predictor, image, face_rect, face_landmarks);
-                control_faces(
-                    render_image,
-                    image, face_landmarks, 
-                    brad_pitt_img, brad_pitt_landmarks);
+                cv::Mat morph_image = celebrity_morpher.get_image(render_image, image, faces[0], face_shape_predictor);
+                morph_image.copyTo(render_image(cv::Rect(width, 0, width, height)));
             }
             image.copyTo(render_image(cv::Rect(0, 0, width, height)));
             display_image = render_image;
