@@ -10,8 +10,9 @@
 
 using namespace std;
 
-#define SPACE_KEY_CODE   32
-#define ESCAPE_KEY_CODE  27
+#define SPACE_KEY_CODE   0x20
+#define ESCAPE_KEY_CODE  0x1B
+#define N_KEY_CODE       0x6E
 
 enum ErrorType
 {
@@ -344,7 +345,14 @@ cv::Mat load_celebrity_info(
 class CelebrityMorpher
 {
 public:
-    CelebrityMorpher(){}
+    CelebrityMorpher()
+    {
+        m_mode = SELF_PORTRAINT;
+        m_celebrity_amount = 0;
+        m_celebrity_index = 0;
+
+        m_is_in_animation = false;
+    }
     ~CelebrityMorpher(){}
 
     bool init(cv::CascadeClassifier &face_cascade, dlib::shape_predictor &face_shape_predictor)
@@ -367,7 +375,21 @@ public:
             }
         }
 
+        if (is_init_ok)
+            m_celebrity_amount = celebrity_amount;
+
         return is_init_ok;
+    }
+
+    void start_session()
+    {
+        m_mode = SELF_PORTRAINT;
+        m_celebrity_index = 0;
+
+        m_is_in_animation = false;
+    }
+    void end_session()
+    {
     }
 
     cv::Mat get_image(
@@ -375,14 +397,136 @@ public:
         cv::Mat &src_image, const cv::Rect &src_face_rect,
         dlib::shape_predictor &face_shape_predictor)
     {
-        std::vector<cv::Point> src_face_landmarks;
-        detect_landmarks(face_shape_predictor, src_image, src_face_rect, src_face_landmarks);
-        return control_faces(src_image, src_face_landmarks, src_image, src_face_landmarks);
+        if (m_is_in_animation)
+            return get_animation_frame();
+
+        src_image.copyTo(m_user_image);
+
+        m_user_face_landmarks.clear();
+        detect_landmarks(face_shape_predictor, m_user_image, src_face_rect, m_user_face_landmarks);
+
+        switch (m_mode)
+        {
+        case SELF_PORTRAINT:
+            return control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+
+        case PUPPETRY:
+            return control_faces(
+                m_user_image, m_user_face_landmarks,
+                m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks);
+
+        default:
+            assert(false);
+            break;
+        }
+
+        return cv::Mat();
+    }
+
+    void next()
+    {
+        if (m_is_in_animation)
+            return;
+
+        switch (m_mode)
+        {
+        case SELF_PORTRAINT:
+            m_mode = PUPPETRY;
+            m_celebrity_index = 0;
+            start_animation();
+            break;
+
+        case PUPPETRY:
+            m_celebrity_index++;
+            if (m_celebrity_index >= m_celebrity_amount)
+            {
+                m_celebrity_index = 0;
+                m_mode = SELF_PORTRAINT;
+            }
+            start_animation();
+            break;
+
+        default:
+            assert(false);
+            break;
+        }
     }
 
 protected:
+    enum
+    {
+        SELF_PORTRAINT = 0,
+        PUPPETRY
+    } m_mode;
+
+    cv::Mat m_animate_start_image;
+    cv::Mat m_animate_end_image;
+
+    cv::Mat m_user_image;
+    std::vector<cv::Point> m_user_face_landmarks;
+    
     std::vector<CelebrityInfo> m_celebrities;
+    int m_celebrity_amount;
+    int m_celebrity_index;
+
+    bool m_is_in_animation;
+    int m_animation_counter;
+    static int ANIMATE_FRAME_AMOUNT;
+
+    void start_animation()
+    {
+        m_is_in_animation = true;
+        m_animation_counter = 0;
+        switch (m_mode)
+        {
+        case SELF_PORTRAINT:
+            m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_amount - 1].image, m_celebrities[m_celebrity_amount - 1].landmarks);
+            m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+            break;
+
+        case PUPPETRY:
+            
+            if (m_celebrity_index > 0)
+            {
+                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index - 1].image, m_celebrities[m_celebrity_index - 1].landmarks);
+                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks);
+            }
+            else
+            {
+                assert(m_celebrity_index == 0);
+                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[0].image, m_celebrities[0].landmarks);
+            }
+            break;
+
+        default:
+            break;
+        }
+    }
+    void end_animation()
+    {
+        m_is_in_animation = false;
+        m_animation_counter = 0;
+        m_animate_start_image.release();
+        m_animate_end_image.release();
+    }
+
+    cv::Mat get_animation_frame()
+    {
+        double ratio = (double)m_animation_counter / ANIMATE_FRAME_AMOUNT;
+
+        cv::Mat animatation_frame;
+        cv::addWeighted(m_animate_start_image, 1.0 - ratio, m_animate_end_image, ratio, 0, animatation_frame);
+
+        m_animation_counter++;
+        if (m_animation_counter > ANIMATE_FRAME_AMOUNT)
+            end_animation();
+
+        return animatation_frame;
+    }
 };
+int CelebrityMorpher::ANIMATE_FRAME_AMOUNT = 60;
+
 
 int main(int, char**)
 {
@@ -435,11 +579,13 @@ int main(int, char**)
                 detect_faces(face_cascade, gray_image, faces);
             }
         }
-     
+
+        bool is_has_face = false;
         if (is_in_morphing_mode)
         {
             cv::Mat render_image(cv::Size(width * 2, height), CV_8UC3, cv::Scalar(0));
-            if (!faces.empty())
+            is_has_face = !faces.empty();
+            if (is_has_face)
             {
                 cv::Mat morph_image = celebrity_morpher.get_image(render_image, image, faces[0], face_shape_predictor);
                 morph_image.copyTo(render_image(cv::Rect(width, 0, width, height)));
@@ -456,9 +602,29 @@ int main(int, char**)
         if (is_leaving)
             break;
 
-        // enter / leave morphing mode
-        if (key_code == SPACE_KEY_CODE)
-            is_in_morphing_mode = !is_in_morphing_mode; 
+        switch (key_code)
+        {
+        case SPACE_KEY_CODE:
+            if (!is_in_morphing_mode)
+            {
+                celebrity_morpher.start_session();
+                is_in_morphing_mode = true;
+            }
+            else
+            {
+                celebrity_morpher.end_session();
+                is_in_morphing_mode = false;
+            }
+            break;
+
+        case N_KEY_CODE:
+            if ((is_in_morphing_mode) && (is_has_face))
+                celebrity_morpher.next();
+            break;
+
+        default:
+            break;
+        }
     }
 
     return 0;
