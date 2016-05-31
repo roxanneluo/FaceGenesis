@@ -118,8 +118,32 @@ void detect_faces(cv::CascadeClassifier &face_cascade, const cv::Mat &gray_image
 
     faces.clear();
 
+    std::vector<Rect> detected_faces;
     equalizeHist(gray_image, gray_image);
-    face_cascade.detectMultiScale(gray_image, faces, 1.21, 3, 0, Size(30, 30));
+    face_cascade.detectMultiScale(gray_image, detected_faces, 1.21, 3, 0, Size(30, 30));
+
+    if (detected_faces.size() > 1)
+    {
+        int max_area = INT_MIN;
+        int max_face_index = -1;
+
+        for (int i = 0; i < (int)detected_faces.size(); i++)
+        {
+            int face_area = detected_faces[i].width * detected_faces[i].height;
+            if (face_area > max_area)
+            {
+                max_area = face_area;
+                max_face_index = i;
+            }
+        }
+        assert(max_face_index != -1);
+
+        faces.push_back(detected_faces[max_face_index]);
+    }
+    else
+    {
+        faces = detected_faces;
+    }
 }
 
 int track_faces(const cv::Mat& image, std::vector<cv::Rect> &faces)
