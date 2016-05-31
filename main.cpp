@@ -14,6 +14,7 @@ using namespace std;
 #define SPACE_KEY_CODE   0x20
 #define ESCAPE_KEY_CODE  0x1B
 #define N_KEY_CODE       0x6E
+#define R_KEY_CODE       0x72
 
 enum ErrorType
 {
@@ -29,9 +30,10 @@ const char *error_msgs[] =
     "Can't load celebrity image"
 };
 
+bool g_is_tracker_init = false;
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
-std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity";
+std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity, [r]: Re-detect Face";
 
 const char* celebrity_paths[] =
 {
@@ -146,15 +148,12 @@ void detect_faces(cv::CascadeClassifier &face_cascade, const cv::Mat &gray_image
     }
 }
 
-int track_faces(const cv::Mat& image, std::vector<cv::Rect> &faces)
+int track_faces(const cv::Mat& image, std::vector<cv::Rect> &faces, KCFTracker &tracker)
 {
-  static KCFTracker tracker;
-  static bool init = false;
-  if (!init) {
-    tracker.init(faces[0], image);
-    init = true;
-  }
-  faces.clear();
+    faces.clear();
+    if (!g_is_tracker_init)
+        return (int)faces.size();
+
   faces.push_back(tracker.update(image));
   
   return (int)faces.size();
@@ -577,9 +576,12 @@ int main(int, char**)
     if (!celebrity_morpher.init(face_cascade, face_shape_predictor))
         return error_happened(ER_OPEN_CELEBRITY_IMAGE);
 
+    static KCFTracker tracker;
+
     cv::namedWindow(window_name, 1);
     std::vector<cv::Rect> faces;
     bool is_in_morphing_mode = false;
+    bool is_force_redetect_face = false;
     for (;;)
     {
         cv::Mat frame;
@@ -595,16 +597,31 @@ int main(int, char**)
         cv::Mat gray_image;
         cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
 
-        if (faces.empty())
+        if ((faces.empty()) || (is_force_redetect_face))
         {
             detect_faces(face_cascade, gray_image, faces);
+            is_force_redetect_face = false;
+
+            g_is_tracker_init = false;
+            if (!faces.empty())
+            {
+                tracker.init(faces[0], image);
+                g_is_tracker_init = true;
+            }
         } 
         else
         {
-            if (track_faces(image, faces) <= 0)
+            if (track_faces(image, faces, tracker) <= 0)
             {
                 // when tracking failed, re-detect faces
                 detect_faces(face_cascade, gray_image, faces);
+
+                g_is_tracker_init = false;
+                if (!faces.empty())
+                {
+                    tracker.init(faces[0], image);
+                    g_is_tracker_init = true;
+                }
             }
         }
 
@@ -648,6 +665,10 @@ int main(int, char**)
         case N_KEY_CODE:
             if ((is_in_morphing_mode) && (is_has_face))
                 celebrity_morpher.next();
+            break;
+
+        case R_KEY_CODE:
+            is_force_redetect_face = true;
             break;
 
         default:
