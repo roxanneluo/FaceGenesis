@@ -432,6 +432,12 @@ public:
         m_user_face_landmarks.clear();
         detect_landmarks(face_shape_predictor, m_user_image, src_face_rect, m_user_face_landmarks);
 
+        if (!IsValidLandmarks(m_user_face_landmarks, src_image.cols, src_image.rows))
+        {
+            m_user_face_landmarks.clear();
+            return cv::Mat(src_image.size(), src_image.type(), cv::Scalar(0));
+        }  
+
         switch (m_mode)
         {
         case SELF_PORTRAINT:
@@ -502,6 +508,9 @@ protected:
 
     void start_animation()
     {
+        if (m_user_face_landmarks.empty())
+            return;
+
         m_is_in_animation = true;
         m_animation_counter = 0;
         switch (m_mode)
@@ -549,6 +558,22 @@ protected:
             end_animation();
 
         return animatation_frame;
+    }
+
+    bool IsValidLandmarks(const std::vector<cv::Point> &landmarks, const int width, const int height)
+    {
+        bool is_valid = true;
+        for (int i = 0; i < (int)landmarks.size(); i++)
+        {
+            int x = landmarks[i].x;
+            int y = landmarks[i].y;
+
+            is_valid = ((x >= 0) && (x < width) && (y >= 0) && (y < height));
+            if (!is_valid)
+                break;
+        }
+
+        return is_valid;
     }
 };
 int CelebrityMorpher::ANIMATE_FRAME_AMOUNT = 60;
