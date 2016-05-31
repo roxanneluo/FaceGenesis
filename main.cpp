@@ -123,8 +123,6 @@ void detect_faces(cv::CascadeClassifier &face_cascade, const cv::Mat &gray_image
     equalizeHist(gray_image, gray_image);
     face_cascade.detectMultiScale(gray_image, detected_faces, 1.21, 3, 0, Size(30, 30));
 
-    cout << "detect: " << detected_faces.size() << endl;
-
     if (detected_faces.size() > 1)
     {
         int max_area = INT_MIN;
