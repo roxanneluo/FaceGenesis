@@ -39,10 +39,9 @@ const char* celebrity_paths[] =
 {
     "brad_pitt.bmp",
     "obama.bmp",
+    "hillary.bmp",
     "tom_hanks.bmp"
 };
-
-std::string brad_pitt_path = "brad_pitt.bmp";
 
 int error_happened(const ErrorType error_type)
 {
@@ -123,6 +122,8 @@ void detect_faces(cv::CascadeClassifier &face_cascade, const cv::Mat &gray_image
     std::vector<Rect> detected_faces;
     equalizeHist(gray_image, gray_image);
     face_cascade.detectMultiScale(gray_image, detected_faces, 1.21, 3, 0, Size(30, 30));
+
+    cout << "detect: " << detected_faces.size() << endl;
 
     if (detected_faces.size() > 1)
     {
