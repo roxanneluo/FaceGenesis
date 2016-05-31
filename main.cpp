@@ -567,6 +567,8 @@ int main(int, char**)
 
     cout << "open video camera ..." << endl;
     cv::VideoCapture cap(0);
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     if (!cap.isOpened())
         return error_happened(ER_OPEN_WEBCAM);
 
