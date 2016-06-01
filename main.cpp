@@ -280,9 +280,7 @@ void warp_image_by_trangles(
     Mat mask(Size(dst_roi.width, dst_roi.height), CV_8UC1, Scalar(0));
     std::vector<Point> shift_dst_ptsI;
     for (int i = 0; i < 3; i++)
-    {
         shift_dst_ptsI.push_back(Point(shift_dst_pts[i].x, shift_dst_pts[i].y));
-    }
     fillConvexPoly(mask, shift_dst_ptsI, Scalar(255));
     dst_roi_image.copyTo(dst_image(dst_roi), mask);
 }
