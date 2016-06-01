@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <time.h>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
@@ -17,6 +18,7 @@ using namespace std;
 #define R_KEY_CODE       0x72
 #define L_KEY_CODE       0x6C
 #define T_KEY_CODE       0x74
+#define S_KEY_CODE       0x73
 
 int fontFace = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
 double fontScale = 1;
@@ -41,7 +43,7 @@ const char *error_msgs[] =
 bool g_is_tracker_init = false;
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
-std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity, [r]: Re-detect Face, [l]: show lanmarkds, [t]: show trangles";
+std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity, [r]: Re-detect Face, [l]: show landmarkds, [t]: show triangles, [s]: save image";
 
 const char* celebrity_paths[] =
 {
@@ -723,7 +725,7 @@ int main(int, char**)
             }
         }
 
-        draw_faces(display_image, faces);
+        //draw_faces(display_image, faces);
         cv::imshow(window_name, display_image);
         
         int key_code = cv::waitKey(10);
@@ -761,6 +763,15 @@ int main(int, char**)
 
         case T_KEY_CODE:
             g_is_show_trangles = !g_is_show_trangles;
+            break;
+
+        case S_KEY_CODE:
+            {
+                time_t curr_time;
+                time(&curr_time);
+                std::string file_path = std::to_string(curr_time) + ".jpg";
+                imwrite(file_path.c_str(), display_image);
+            }
             break;
 
         default:
