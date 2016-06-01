@@ -16,6 +16,9 @@ using namespace std;
 #define N_KEY_CODE       0x6E
 #define R_KEY_CODE       0x72
 
+int fontFace = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
+double fontScale = 1;
+
 enum ErrorType
 {
     ER_LOAD_FACE_MODULE = 0,
@@ -47,6 +50,11 @@ int error_happened(const ErrorType error_type)
 {
     cout << error_msgs[error_type] << endl;
     return -1;
+}
+
+bool is_mouth_seam_by_idx(const int index)
+{
+    return (index >= 60);
 }
 
 class MySubdiv2D : public cv::Subdiv2D
@@ -281,7 +289,7 @@ void get_triangles(
     MySubdiv2D subdiv(Rect(0, 0, image.cols, image.rows));
     for (int i = 0; i < (int)landmarks.size(); i++)
         subdiv.insert(Point2f(landmarks[i].x, landmarks[i].y));
-        
+
     subdiv.getTriangleIndices(triangle_indices);
     
     for (int i = 0; i < (int)triangle_indices.size(); i += 3)
@@ -299,7 +307,8 @@ void get_triangles(
 
 cv::Mat control_faces(
     cv::Mat &src_image, const std::vector<cv::Point> &src_landmarks,
-    cv::Mat &dst_image, const std::vector<cv::Point> &dst_landmarks)
+    cv::Mat &dst_image, const std::vector<cv::Point> &dst_landmarks,
+    bool is_remove_mouth_seam_region)
 {
     using namespace cv;
 
@@ -328,6 +337,31 @@ cv::Mat control_faces(
     Mat control_image = Mat(src_image.size(), CV_8UC3, Scalar(0));
     for (size_t i = 0; i < src_triangles.size(); i++)
         warp_image_by_trangles(dst_image, dst_triangles[i], control_image, src_triangles[i]);
+
+    if (is_remove_mouth_seam_region)
+    {
+        int max_y = INT_MIN;
+        int min_y = INT_MAX;
+        int max_x = INT_MIN;
+        int min_x = INT_MAX;
+        std::vector<cv::Point> mouth_seam_pts;
+        for (int i = 0; i < (int)src_landmarks.size(); i++)
+        {
+            if (is_mouth_seam_by_idx(i))
+            {
+                cv::Point pt = src_landmarks[i];
+                mouth_seam_pts.push_back(pt);
+
+                max_y = std::max(pt.y, max_y);
+                min_y = std::min(pt.y, min_y);
+                max_x = std::max(pt.x, max_x);
+                min_x = std::min(pt.x, min_x);
+            } 
+        }
+        if ((max_y - min_y)/(float)(max_x - min_x) > 0.05f) // if the user open his/her mouth large enough 
+            fillConvexPoly(control_image, mouth_seam_pts, Scalar(0, 0, 0));
+    }
+    
 
     return control_image;
 }
@@ -441,12 +475,12 @@ public:
         switch (m_mode)
         {
         case SELF_PORTRAINT:
-            return control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+            return control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks, false);
 
         case PUPPETRY:
             return control_faces(
                 m_user_image, m_user_face_landmarks,
-                m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks);
+                m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks, true);
 
         default:
             assert(false);
@@ -516,21 +550,21 @@ protected:
         switch (m_mode)
         {
         case SELF_PORTRAINT:
-            m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_amount - 1].image, m_celebrities[m_celebrity_amount - 1].landmarks);
-            m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
+            m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_amount - 1].image, m_celebrities[m_celebrity_amount - 1].landmarks, true);
+            m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks, false);
             break;
 
         case PUPPETRY:
             if (m_celebrity_index > 0)
             {
-                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index - 1].image, m_celebrities[m_celebrity_index - 1].landmarks);
-                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks);
+                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index - 1].image, m_celebrities[m_celebrity_index - 1].landmarks, true);
+                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks, true);
             }
             else
             {
                 assert(m_celebrity_index == 0);
-                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks);
-                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[0].image, m_celebrities[0].landmarks);
+                m_animate_start_image = control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks, false);
+                m_animate_end_image = control_faces(m_user_image, m_user_face_landmarks, m_celebrities[0].image, m_celebrities[0].landmarks, true);
             }
             break;
 
