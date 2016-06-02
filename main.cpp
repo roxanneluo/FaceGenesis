@@ -725,7 +725,8 @@ int main(int, char**)
             }
         }
 
-        //draw_faces(display_image, faces);
+        if ((!g_is_show_lanmarks) && (!g_is_show_trangles))
+            draw_faces(display_image, faces);
         cv::imshow(window_name, display_image);
         
         int key_code = cv::waitKey(10);
