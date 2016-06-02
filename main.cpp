@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <time.h>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
@@ -15,9 +16,15 @@ using namespace std;
 #define ESCAPE_KEY_CODE  0x1B
 #define N_KEY_CODE       0x6E
 #define R_KEY_CODE       0x72
+#define L_KEY_CODE       0x6C
+#define T_KEY_CODE       0x74
+#define S_KEY_CODE       0x73
 
 int fontFace = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
 double fontScale = 1;
+
+bool g_is_show_lanmarks = false;
+bool g_is_show_trangles = false;
 
 enum ErrorType
 {
@@ -36,7 +43,7 @@ const char *error_msgs[] =
 bool g_is_tracker_init = false;
 std::string face_cascade_name = "haarcascade_frontalface_alt.xml";
 std::string face_shape_path = "shape_predictor_68_face_landmarks.dat";
-std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity, [r]: Re-detect Face";
+std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Celebrity, [r]: Re-detect Face, [l]: show landmarkds, [t]: show triangles, [s]: save image";
 
 const char* celebrity_paths[] =
 {
@@ -213,10 +220,12 @@ void detect_landmarks(dlib::shape_predictor &face_shape_predictor,
     }
 }
 
-void draw_triangles(cv::Mat& img, const std::vector<cv::Vec6f> &triangles, cv::Scalar delaunay_color)
+void draw_triangles(cv::Mat& img, const std::vector<cv::Vec6f> &triangles)
 {
     using namespace cv;
  
+    Scalar white_color = Scalar(255, 255, 255);
+
     Size size = img.size();
     Rect rect(0, 0, size.width, size.height);
 
@@ -231,9 +240,9 @@ void draw_triangles(cv::Mat& img, const std::vector<cv::Vec6f> &triangles, cv::S
         // Draw rectangles completely inside the image.
         if (rect.contains(pt[0]) && rect.contains(pt[1]) && rect.contains(pt[2]))
         {
-            line(img, pt[0], pt[1], delaunay_color, 1, CV_AA, 0);
-            line(img, pt[1], pt[2], delaunay_color, 1, CV_AA, 0);
-            line(img, pt[2], pt[0], delaunay_color, 1, CV_AA, 0);
+            line(img, pt[0], pt[1], white_color, 1, CV_AA, 0);
+            line(img, pt[1], pt[2], white_color, 1, CV_AA, 0);
+            line(img, pt[2], pt[0], white_color, 1, CV_AA, 0);
         }
     }
 }
@@ -273,9 +282,7 @@ void warp_image_by_trangles(
     Mat mask(Size(dst_roi.width, dst_roi.height), CV_8UC1, Scalar(0));
     std::vector<Point> shift_dst_ptsI;
     for (int i = 0; i < 3; i++)
-    {
         shift_dst_ptsI.push_back(Point(shift_dst_pts[i].x, shift_dst_pts[i].y));
-    }
     fillConvexPoly(mask, shift_dst_ptsI, Scalar(255));
     dst_roi_image.copyTo(dst_image(dst_roi), mask);
 }
@@ -361,7 +368,15 @@ cv::Mat control_faces(
         if ((max_y - min_y)/(float)(max_x - min_x) > 0.05f) // if the user open his/her mouth large enough 
             fillConvexPoly(control_image, mouth_seam_pts, Scalar(0, 0, 0));
     }
-    
+
+    if (g_is_show_trangles)
+    {
+        draw_triangles(control_image, src_triangles);
+        draw_triangles(src_image, src_triangles);
+    }
+        
+    if (g_is_show_lanmarks)
+        draw_landmarks(control_image, src_landmarks);
 
     return control_image;
 }
@@ -472,14 +487,17 @@ public:
             return cv::Mat(src_image.size(), src_image.type(), cv::Scalar(0));
         }  
 
+        if (g_is_show_lanmarks)
+            draw_landmarks(src_image, m_user_face_landmarks);
+
         switch (m_mode)
         {
         case SELF_PORTRAINT:
-            return control_faces(m_user_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks, false);
+            return control_faces(src_image, m_user_face_landmarks, m_user_image, m_user_face_landmarks, false);
 
         case PUPPETRY:
             return control_faces(
-                m_user_image, m_user_face_landmarks,
+                src_image, m_user_face_landmarks,
                 m_celebrities[m_celebrity_index].image, m_celebrities[m_celebrity_index].landmarks, true);
 
         default:
@@ -699,7 +717,17 @@ int main(int, char**)
             display_image = render_image;
         }
 
-        draw_faces(display_image, faces);
+        if (g_is_show_lanmarks)
+        {
+            if ((!is_in_morphing_mode) && (!faces.empty()))
+            {
+                std::vector<cv::Point> landmarks;
+                detect_landmarks(face_shape_predictor, image, faces[0], landmarks);
+                draw_landmarks(image, landmarks);
+            }
+        }
+
+        //draw_faces(display_image, faces);
         cv::imshow(window_name, display_image);
         
         int key_code = cv::waitKey(10);
@@ -729,6 +757,23 @@ int main(int, char**)
 
         case R_KEY_CODE:
             is_force_redetect_face = true;
+            break;
+
+        case L_KEY_CODE:
+            g_is_show_lanmarks = !g_is_show_lanmarks;
+            break;
+
+        case T_KEY_CODE:
+            g_is_show_trangles = !g_is_show_trangles;
+            break;
+
+        case S_KEY_CODE:
+            {
+                time_t curr_time;
+                time(&curr_time);
+                std::string file_path = std::to_string(curr_time) + ".jpg";
+                imwrite(file_path.c_str(), display_image);
+            }
             break;
 
         default:
