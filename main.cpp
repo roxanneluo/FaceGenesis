@@ -47,10 +47,10 @@ std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Ce
 
 const char* celebrity_paths[] =
 {
-    "brad_pitt.bmp",
     "obama.bmp",
     "hillary.bmp",
-    "tom_hanks.bmp"
+    "trump.bmp",
+    "tom_hanks.bmp",
 };
 
 int error_happened(const ErrorType error_type)
