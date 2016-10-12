@@ -47,6 +47,7 @@ std::string window_name = "[ESC]:Quit, [space]:Enter/Leave Morphing, [n]:Next Ce
 
 const char* celebrity_paths[] =
 {
+    "chris.jpg",
     "brad_pitt.bmp",
     "obama.bmp",
     "hillary.bmp",
