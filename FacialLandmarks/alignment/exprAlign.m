@@ -1,0 +1,66 @@
+dataRoot = 'E:\LeeYuguang\ML_Project\FaceGenesis\data\';
+personID = '02';
+oriFolderString = 'KDEF_frontImages\X';
+procFolderString = 'KDEF_Proc\KDEF_frontProcX';
+
+expr1 = 'AN';
+expr2 = 'NE';
+
+landmark_idx = [11, 12, 13, 14, 20, 23, 26, 29];
+
+FileName1 = [dataRoot, procFolderString, expr1, '\AF', personID, expr1, 'S.mat'];
+FileName2 = [dataRoot, procFolderString, expr2, '\AF', personID, expr2, 'S.mat'];
+
+load(FileName1);
+alignInfo1 = final_align_info;
+landmark1 = alignInfo1.landmark3_finalAlign;
+alignface1 = final_align_face;
+imshow(alignface1);
+hold on;
+for i=1:49
+    plot(landmark1(i,1), landmark1(i,2),'*');
+    hold on
+end
+
+pt1 = landmark1(landmark_idx,:);
+feats = zeros(2*length(landmark_idx),3);
+
+for i=1:length(landmark_idx)
+    feats(2*i-1,:) = [pt1(i,1), 1, 0];
+    feats(2*i,:) = [pt1(i,2), 0, 1];
+end
+
+
+
+load(FileName2);
+alignInfo2 = final_align_info;
+landmark2 = alignInfo2.landmark3_finalAlign;
+alignface2 = final_align_face;
+figure;
+imshow(alignface2);
+hold on;
+for i=1:49
+    plot(landmark2(i,1), landmark2(i,2),'*');
+    hold on
+end
+pt2 = landmark2(landmark_idx,:);
+
+Y = zeros(2*length(landmark_idx),1);
+
+for i=1:length(landmark_idx)
+    Y(2*i-1) = pt2(i,1);
+    Y(2*i) = pt2(i,2);
+end
+
+
+x = lsqr(feats,Y);
+
+new_landmark1(:,1) = landmark1(:,1) * x(1) + x(2);
+new_landmark1(:,2) = landmark1(:,2) * x(1) + x(3);
+
+diff = new_landmark1 - landmark2;
+
+for i=1:49
+    plot(new_landmark1(i,1), new_landmark1(i,2),'o');
+    hold on
+end
