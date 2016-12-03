@@ -12,7 +12,7 @@ find_package(OpenCV)
 find_package(X11)
 #include(../dlib-18.18/dlib/cmake)
 file(GLOB_RECURSE KCF_TRACKER_SRCS kcf_tracker/*.cpp)
-include_directories(${OpenCV_INCLUDE_DIRS} ../dlib-18.18/ .)
+#include_directories(${OpenCV_INCLUDE_DIRS} ../dlib-18.18/ .)
 
 # Tell CMake to compile a program.  We do this with the ADD_EXECUTABLE()
 # statement which takes the name of the output executable and then a list of
@@ -20,4 +20,4 @@ include_directories(${OpenCV_INCLUDE_DIRS} ../dlib-18.18/ .)
 # in general you will make programs that const of many .cpp files.
 ADD_EXECUTABLE(FaceOff main.cpp ${KCF_TRACKER_SRCS})
 # Then we tell it to link with dlib.
-TARGET_LINK_LIBRARIES(FaceOff dlib ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(FaceOff  ${OpenCV_LIBS})
