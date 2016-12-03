@@ -1,0 +1,11 @@
+function landmark = alignLandmarks(inPathList, benchmark, outPath)
+
+landmarks = cell(length(inPathList),2);
+for i=1:length(inPathList)
+    load(inPathList{i});
+    T = compute_nonreflectiveSimilarity(final_align_info.landmark1_orig,benchmark,0);
+    mark = [mark, ones(size(mark,1),1)];
+    landmark = mark * T;
+    
+end
+
