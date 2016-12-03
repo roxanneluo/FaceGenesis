@@ -1,9 +1,11 @@
 *.DS_Store
 build
 *.mat
+*.png
+*.jpg
 *.old
+*/FaceOff
+*/CMakeCache.txt
 *.cmake
 *Makefile
 *CMakeFiles
-*/FaceOff
-*/CMakeCache.txt
