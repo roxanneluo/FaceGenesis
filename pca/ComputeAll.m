@@ -1,5 +1,5 @@
 % mu + eigen_id * alpha_id + mu_exp + eigen_exp * alpha_exp
-function [mu_id, eigen_id, mu_exp, eigen_exp, exp_labels, score_id, score_exp, latent_id, latent_exp] = ComputeAll(filename, k)
+function [mu_id, eigen_id, mu_exp, eigen_exp, exp_labels, score_id, score_exp, latent_id, latent_exp, neutral] = ComputeAll(filename, k)
     [neutral, mu_id, expressions, mu_exp, exp_labels] = preprocess(filename, k);
     [eigen_id, eigen_exp, score_id, score_exp, latent_id, latent_exp] = MMD(neutral, expressions);
 end
@@ -13,6 +13,7 @@ function [eigen_id, eigen_exp, score_id, score_exp, latent_id, latent_exp] = MMD
     plot(latent_exp);
     title('Singular Values for Expressions')
 end
+%{
 function [neutral, mu_id, expressions, mu_exp, exp_labels] = preprocess(filename, k)
     data = load(filename);
     data = data.featsTe;
@@ -47,4 +48,14 @@ function [neutral, mu_id, expressions, mu_exp, exp_labels] = preprocess(filename
     mu_exp = mean(expressions, 1);
     expressions = expressions - ones(size(expressions, 1), 1) * mu_exp;
     mu_exp = mu_exp';
+end
+%}
+
+function [neutral, mu_id, expressions, mu_exp, exp_labels] = preprocess(filename, k)
+    dataset = load(filename);
+    neutral = dataset.landmark_NE_aligned;
+    expressions = dataset.landmark_aligned - repmat(neutral, k, 1);
+    mu_id = mean(neutral, 1);
+    mu_exp = mean(expressions, 1);
+    exp_labels = dataset.label;
 end
