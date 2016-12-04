@@ -1,0 +1,47 @@
+root = 'E:\FaceAnalysis\KDEF_frontImages\XAF\'
+
+load('benchmark.mat')
+
+list = dir([root, '*.mat']);
+fileList = cell(0);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+root = 'E:\FaceAnalysis\KDEF_frontImages\XAN\'
+list = dir([root, '*.mat']);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+root = 'E:\FaceAnalysis\KDEF_frontImages\XDI\'
+list = dir([root, '*.mat']);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+root = 'E:\FaceAnalysis\KDEF_frontImages\XHA\'
+list = dir([root, '*.mat']);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+root = 'E:\FaceAnalysis\KDEF_frontImages\XNE\'
+list = dir([root, '*.mat']);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+root = 'E:\FaceAnalysis\KDEF_frontImages\XSA\'
+list = dir([root, '*.mat']);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+root = 'E:\FaceAnalysis\KDEF_frontImages\XSU\'
+list = dir([root, '*.mat']);
+for i=1:length(list)
+    fileList = [fileList, {[root, list(i).name]}];
+end
+
+alignLandmarks(fileList, meanFeat, 'KDEF_aligned.mat');
