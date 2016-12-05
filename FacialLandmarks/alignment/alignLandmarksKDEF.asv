@@ -15,8 +15,7 @@ for i=1:length(inPathList)
     load(inPathList{i});
     load(inPathList1{i});
     if size(bs,2) > 1
-        bs = bs(1);
-    end
+        bs = bs()
     X = (bs.xy(52:end,1) + bs.xy(52:end,3)) / 2;
     Y = (bs.xy(52:end,2) + bs.xy(52:end,4)) / 2;
     lmark = [final_align_info.landmark1_orig; [X, Y]];
