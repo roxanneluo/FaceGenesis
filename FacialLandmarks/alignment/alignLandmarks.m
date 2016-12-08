@@ -27,17 +27,17 @@ for i=1:length(inPathList)
     idx = floor(idx / 3) + 1;
     aligned = [landmark(:,1);landmark(:,2)];
     orig = [final_align_info.landmark1_orig(:,1);final_align_info.landmark1_orig(:,2)];
-    if idx == 5
+    %if idx == 5
         landmark_NE_aligned(end+1, :) = double(aligned)';
         landmark_NE_orig(end+1, :) = double(orig)';
         fileName_NE(end+1) = {Name};
-        label_NE(end+1) = idx;
-    else
-        landmark_orig(end+1, :) = double(aligned)';
-        landmark_aligned(end+1, :) = double(orig)';
-        fileName(end+1) = {Name};
-        label(end+1) = idx;
-    end
+        label_NE(end+1) = 5;
+    %else
+%         landmark_orig(end+1, :) = double(aligned)';
+%         landmark_aligned(end+1, :) = double(orig)';
+%         fileName(end+1) = {Name};
+%         label(end+1) = idx;
+%     end
 end
 
 fileName = fileName';

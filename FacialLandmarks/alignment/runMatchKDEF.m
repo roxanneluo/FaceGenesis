@@ -11,7 +11,7 @@ for i=1:length(list)
     fileList = [fileList, {[root, list(i).name]}];
     fileList1 = [fileList1, {[root1, list1(i).name]}];
 end
-
+a
 root = 'E:\FaceAnalysis\KDEF_Proc\KDEF_frontProcXAN\'
 root1 = 'E:\FaceAnalysis\KDEF_Proc\Contour\XAN\';
 list = dir([root, '*.mat']);
